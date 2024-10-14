@@ -22,6 +22,8 @@ WHITE='\033[01;37m'
 
 # globals
 #=============================================================================
+VERBOSE_MODE=false
+DELETE_FILES_AT_DEST=false
 USING_SSH=false
 USING_NFS_MOUNT=false
 LOGGING_ENABLED=false
@@ -43,20 +45,33 @@ LOGGING_ENABLED=false
 
 # --omit-dir-times: neccessary if rsyncing to locally mounted NFS share
 
-RSYNC_DRYRUN_OPTS="-avn --delete"
-RSYNC_OPTS="-ahhh --delete --info=progress2"
+RSYNC_DRYRUN_OPTS="-avn"
+RSYNC_OPTS="-ahhh --info=progress2"
 
 BACKUP_FILENAME="backup.log"
 
 function main() {
 
 	if [[ "$USING_NFS_MOUNT" = true ]]; then
-		RSYNC_OPTS="-ahhh --omit-dir-times --delete --info=progress2"
+		RSYNC_OPTS="$RSYNC_OPTS --omit-dir-times"
+	fi
+
+	if [[ "$DELETE_FILES_AT_DEST" = true ]]; then
+		RSYNC_DRYRUN_OPTS="$RSYNC_DRYRUN_OPTS --delete"
+		RSYNC_OPTS="$RSYNC_OPTS --delete"
+	fi
+
+	if [[ "$VERBOSE_MODE" = true ]]; then
+		RSYNC_OPTS="$RSYNC_OPTS --verbose"
 	fi
 
 	check_args "$@"
 	check_dirs "$@"
-    test_rsync "$@"
+
+	if [[ "$DELETE_FILES_AT_DEST" = true ]]; then
+		test_rsync "$@"
+	fi
+
     confirm_execute_rsync "$@"
     execute_rsync "$@"
 }
@@ -75,17 +90,19 @@ function print_help() {
 
     echo -e "usage: $0 [-h] [-a] [-l] [{source path 1}, {source path 2}, ... ] {backup path}"
 	echo "-h: display this help message"
-	echo "-a: enable rsync archive mode (note: do not use this for mounted NFS shares)"
+	echo "-d: delete files in destination that aren't present in source"
+	echo "-s: run rysnc over ssh (certain directory checks are omitted)"
+	echo "-n: run rysnc to locally mounted NFS share"
 	echo "-l: create a backup.log file at root of backup path"
 	echo ""
-	echo "example #1: use rsync in archive mode to backup to external HD and create a log file"
-	echo "rsync_helper.sh -a -l ~/Documents ~/Downloads ~/Music /run/media/robert/Iron_Wolf"
+	echo "example #1: use rsync to backup to external HD.  Files not in source are deleted at destination"
+	echo "rsync_helper.sh -d ~/Documents ~/Downloads ~/Music /run/media/robert/Iron_Wolf"
 	echo ""
-	echo "example #2: use rsync to backup to a mounted NFSv4 share"
-	echo "rsync_helper.sh ~/Music ~/TrueNAS/media"
+	echo "example #2: use rsync to backup to a mounted NFSv4 share.  Files not in source are deleted at destination"
+	echo "rsync_helper.sh -d -n ~/Music ~/TrueNAS/media"
 	echo ""
-	echo "example #3: use rsync over ssh to backup another host and create a log file"
-	echo "rsync_helper.sh -l ~/Games/SteamDeck/retrodeck/roms ~/Games/SteamDeck/retrodeck/bios deck@steamdeck:/home/deck/retrodeck"
+	echo "example #3: use rsync over ssh to backup another host"
+	echo "rsync_helper.sh -s ~/Projects robert@nas:/mnt/personal/robert"
 }
 
 function check_dirs() {
@@ -147,9 +164,12 @@ function test_rsync() {
 		local rsync_trgt="$trgt/."
 
 		echo "${i}: $rsync_src --> $rsync_trgt"
+
 		echo "---------------------------"
 		echo "files that will be deleted:"
-		echo -e "---------------------------${RED}"
+		echo "---------------------------"
+
+		echo -e "${RED}"
 
 		rsync $RSYNC_DRYRUN_OPTS $rsync_src $rsync_trgt | grep "deleting"
 			
@@ -241,12 +261,14 @@ function echo_and_log() {
 }
 
 # get the options that are passed in (e.g. -h)
-while getopts ":hsnl" option; do
+while getopts ":hvdsnl" option; do
   case $option in
     h) print_help; exit ;;
-    s) USING_SSH=true; echo "using rsync over SSH"; ;;
-    n) USING_NFS_MOUNT=true; echo "using rsync with locally mounted NFS share"; ;;
-	l) LOGGING_ENABLED=true echo "logging is enabled"; ;;
+	v) VERBOSE_MODE=true; echo "* rysnc will run in verbose mode"; ;;
+	d) DELETE_FILES_AT_DEST=true; echo "* rysnc will delete files at destination that aren't present in source"; ;;
+    s) USING_SSH=true; echo "* using rsync over SSH, destination directory existence will not be checked"; ;;
+    n) USING_NFS_MOUNT=true; echo "* using rsync with locally mounted NFS share"; ;;
+	l) LOGGING_ENABLED=true echo "* logging is enabled"; ;;
     ?) echo "error: option -$OPTARG is not implemented"; exit ;;
   esac
 done
