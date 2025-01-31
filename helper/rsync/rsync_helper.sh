@@ -88,12 +88,13 @@ function check_args() {
 
 function print_help() {
 
-    echo -e "usage: $0 [-h] [-a] [-l] [{source path 1}, {source path 2}, ... ] {backup path}"
+    echo -e "usage: $0 [-h] [-d] [-s] [-n] [-l] [-v] [{source path 1}, {source path 2}, ... ] {backup path}"
 	echo "-h: display this help message"
 	echo "-d: delete files in destination that aren't present in source"
-	echo "-s: run rysnc over ssh (certain directory checks are omitted)"
-	echo "-n: run rysnc to locally mounted NFS share"
+	echo "-s: run rsync over ssh (certain directory checks are omitted)"
+	echo "-n: run rsync to locally mounted NFS share"
 	echo "-l: create a backup.log file at root of backup path"
+	echo "-v: run rsync in verbose mode"
 	echo ""
 	echo "example #1: use rsync to backup to external HD.  Files not in source are deleted at destination"
 	echo "rsync_helper.sh -d ~/Documents ~/Downloads ~/Music /run/media/robert/Iron_Wolf"
