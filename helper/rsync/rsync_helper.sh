@@ -24,7 +24,6 @@ WHITE='\033[01;37m'
 #=============================================================================
 VERBOSE_MODE=false
 DELETE_FILES_AT_DEST=false
-USING_SSH=false
 USING_NFS_MOUNT=false
 LOGGING_ENABLED=false
 
@@ -91,7 +90,6 @@ function print_help() {
     echo -e "usage: $0 [-h] [-d] [-s] [-n] [-l] [-v] [{source path 1}, {source path 2}, ... ] {backup path}"
 	echo "-h: display this help message"
 	echo "-d: delete files in destination that aren't present in source"
-	echo "-s: run rsync over ssh (certain directory checks are omitted)"
 	echo "-n: run rsync to locally mounted NFS share"
 	echo "-l: create a backup.log file at root of backup path"
 	echo "-v: run rsync in verbose mode"
@@ -129,11 +127,7 @@ function check_dirs() {
 	do
 		local trgt="$trgt_root/$(basename $src)"
 
-		if [[ "$USING_SSH" = true ]]; then
-			echo -e "${YELLOW}$i: $trgt -- using ssh, unable to check target directory${NC}"
-		else
-			check_dir_exists $i $trgt
-		fi
+		check_dir_exists $i $trgt
 
 		i=$(($i + 1))
 	done
@@ -141,12 +135,55 @@ function check_dirs() {
 
 function check_dir_exists() {
 
-	if [[ ! -d "$2" ]]; then
-        echo -e "${RED}$1: $2 does not exist!${NC}"
-        exit 1
+	if is_remote $2; then
+		if check_remote_dir $2; then
+			echo -e "${GREEN}$1: [REMOTE] $2 exists.${NC}"
+		else
+			echo -e "${RED}$1: [REMOTE] $2 does NOT exist!${NC}"
+			exit 1
+		fi
 	else
-		echo -e "${GREEN}$1: $2 exists.${NC}"
+		if check_local_dir $2; then
+        	echo -e "${GREEN}$1: [LOCAL] $2 exists.${NC}"
+		else
+			echo -e "${RED}$1: [LOCAL] $2 does NOT exist!${NC}"
+			exit 1
+		fi
     fi
+}
+
+function is_remote() {
+
+  local spec=$1
+
+  # Match rsync's remote formats:
+  #   [user@]host:/path
+  #   rsync://host/module/path
+  if [[ $spec =~ ^([^@:]+@)?[^:]+: ]]; then
+    return 0   # true: remote
+  else
+    return 1   # false: local
+  fi
+}
+
+function check_local_dir() {
+
+	if [[ ! -d "$1" ]]; then
+        return 1   # false: does not exist
+	else
+		return 0   # true: does exist
+    fi
+}
+
+function check_remote_dir() {
+
+  local spec=$1
+
+  # Extract "user@host" and "path" from [user@]host:/path
+  local host=${spec%%:*}
+  local path=${spec#*:}
+
+  ssh "$host" "[ -d '$path' ]"
 }
 
 function test_rsync() {
@@ -267,7 +304,6 @@ while getopts ":hvdsnl" option; do
     h) print_help; exit ;;
 	v) VERBOSE_MODE=true; echo "* rysnc will run in verbose mode"; ;;
 	d) DELETE_FILES_AT_DEST=true; echo "* rysnc will delete files at destination that aren't present in source"; ;;
-    s) USING_SSH=true; echo "* using rsync over SSH, destination directory existence will not be checked"; ;;
     n) USING_NFS_MOUNT=true; echo "* using rsync with locally mounted NFS share"; ;;
 	l) LOGGING_ENABLED=true echo "* logging is enabled"; ;;
     ?) echo "error: option -$OPTARG is not implemented"; exit ;;
