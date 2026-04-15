@@ -305,7 +305,7 @@ while getopts ":hvdsnl" option; do
 	v) VERBOSE_MODE=true; echo "* rysnc will run in verbose mode"; ;;
 	d) DELETE_FILES_AT_DEST=true; echo "* rysnc will delete files at destination that aren't present in source"; ;;
     n) USING_NFS_MOUNT=true; echo "* using rsync with locally mounted NFS share"; ;;
-	l) LOGGING_ENABLED=true echo "* logging is enabled"; ;;
+	l) LOGGING_ENABLED=true; echo "* logging is enabled"; ;;
     ?) echo "error: option -$OPTARG is not implemented"; exit ;;
   esac
 done
