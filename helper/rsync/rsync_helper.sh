@@ -65,6 +65,13 @@ function main() {
 	fi
 
 	check_args "$@"
+
+	local trgt_root="${@: -1}"
+	if [[ "$LOGGING_ENABLED" = true ]] && is_remote "$trgt_root"; then
+		echo "* logging disabled: destination is remote"
+		LOGGING_ENABLED=false
+	fi
+
 	check_dirs "$@"
 
 	if [[ "$DELETE_FILES_AT_DEST" = true ]]; then
@@ -87,7 +94,7 @@ function check_args() {
 
 function print_help() {
 
-    echo -e "usage: $0 [-h] [-d] [-s] [-n] [-l] [-v] [{source path 1}, {source path 2}, ... ] {backup path}"
+    echo -e "usage: $0 [-h] [-d] [-n] [-l] [-v] [{source path 1}, {source path 2}, ... ] {backup path}"
 	echo "-h: display this help message"
 	echo "-d: delete files in destination that aren't present in source"
 	echo "-n: run rsync to locally mounted NFS share"
@@ -100,8 +107,8 @@ function print_help() {
 	echo "example #2: use rsync to backup to a mounted NFSv4 share.  Files not in source are deleted at destination"
 	echo "rsync_helper.sh -d -n ~/Music ~/TrueNAS/media"
 	echo ""
-	echo "example #3: use rsync over ssh to backup another host"
-	echo "rsync_helper.sh -s ~/Projects robert@nas:/mnt/personal/robert"
+	echo "example #3: use rsync over ssh to backup to a remote host"
+	echo "rsync_helper.sh ~/Projects robert@nas:/mnt/personal/robert"
 }
 
 function check_dirs() {
@@ -120,17 +127,8 @@ function check_dirs() {
 		i=$(($i + 1))
 	done
 
-	echo "checking target directories..."
-
-	i=1
-	for src in "${src_array[@]}"
-	do
-		local trgt="$trgt_root/$(basename $src)"
-
-		check_dir_exists $i $trgt
-
-		i=$(($i + 1))
-	done
+	echo "checking target directory..."
+	check_dir_exists 1 $trgt_root
 }
 
 function check_dir_exists() {
@@ -261,11 +259,12 @@ function execute_rsync() {
 	if [[ "$LOGGING_ENABLED" = true && -e ${trgt_root}/${BACKUP_FILENAME} ]]; then
     	rm ${trgt_root}/${BACKUP_FILENAME}
 	fi
-	
+
 	local start_date=$(date)
 	echo_and_log $start_date $trgt_root
 	echo_and_log "executing rsync routines:" $trgt_root
 
+	local failed=0
 	local i=1
 	for src in "${src_array[@]}"
 	do
@@ -276,13 +275,23 @@ function execute_rsync() {
 		echo_and_log "${i}: $rsync_src --> $rsync_trgt" $trgt_root
 
 		rsync $RSYNC_OPTS $rsync_src $rsync_trgt
+		if [[ $? -ne 0 ]]; then
+			echo -e "${RED}error: rsync failed for: $rsync_src --> $rsync_trgt${NC}"
+			failed=$((failed + 1))
+		fi
 
 		i=$(($i + 1))
 	done
 
 	local end_date=$(date)
 	echo_and_log $end_date $trgt_root
-	echo_and_log "completed rsync routines." $trgt_root
+
+	if [[ $failed -gt 0 ]]; then
+		echo_and_log "completed rsync routines with $failed failure(s)." $trgt_root
+		exit 1
+	else
+		echo_and_log "completed rsync routines." $trgt_root
+	fi
 }
 
 function echo_and_log() {
@@ -299,11 +308,11 @@ function echo_and_log() {
 }
 
 # get the options that are passed in (e.g. -h)
-while getopts ":hvdsnl" option; do
+while getopts ":hvdnl" option; do
   case $option in
     h) print_help; exit ;;
-	v) VERBOSE_MODE=true; echo "* rysnc will run in verbose mode"; ;;
-	d) DELETE_FILES_AT_DEST=true; echo "* rysnc will delete files at destination that aren't present in source"; ;;
+	v) VERBOSE_MODE=true; echo "* rsync will run in verbose mode"; ;;
+	d) DELETE_FILES_AT_DEST=true; echo "* rsync will delete files at destination that aren't present in source"; ;;
     n) USING_NFS_MOUNT=true; echo "* using rsync with locally mounted NFS share"; ;;
 	l) LOGGING_ENABLED=true; echo "* logging is enabled"; ;;
     ?) echo "error: option -$OPTARG is not implemented"; exit ;;
